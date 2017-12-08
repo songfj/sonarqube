@@ -311,6 +311,27 @@ public class UpdateActionTest {
   }
 
   @Test
+  public void throw_IllegalArgumentException_if_trying_to_update_builtin_rule_description() throws Exception {
+    logInAsQProfileAdministrator();
+    RuleDefinitionDto templateRule = db.rules().insert(
+      r -> r.setRuleKey(RuleKey.of("java", "S001")),
+      r -> r.setIsTemplate(true),
+      r -> r.setCreatedAt(PAST),
+      r -> r.setDescription("Old description"),
+      r -> r.setUpdatedAt(PAST));
+
+    expectedException.expect(IllegalArgumentException.class);
+    expectedException.expectMessage("Not a custom rule");
+
+    ws.newRequest().setMethod("POST")
+      .setParam("key", templateRule.getKey().toString())
+      .setParam("name", "My custom rule")
+      .setParam("markdown_description", "New description")
+      .execute();
+
+  }
+
+  @Test
   public void throw_ForbiddenException_if_not_profile_administrator() throws Exception {
     userSession.logIn();
 

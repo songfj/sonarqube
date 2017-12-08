@@ -27,6 +27,7 @@ import com.google.common.collect.Sets;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nonnull;
+import org.assertj.core.api.ThrowableAssertAlternative;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -60,6 +61,9 @@ import org.sonar.server.tester.UserSessionRule;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
+import static org.sonar.api.rule.RuleStatus.REMOVED;
+import static org.sonar.api.rule.Severity.CRITICAL;
+import static org.sonar.server.rule.RuleUpdate.createForPluginRule;
 
 public class RuleUpdaterTest {
 
@@ -82,24 +86,22 @@ public class RuleUpdaterTest {
   private RuleIndex ruleIndex = new RuleIndex(es.client(), system2);
   private RuleIndexer ruleIndexer = new RuleIndexer(es.client(), db.getDbClient());
   private DbSession dbSession = db.getSession();
-  private TestDefaultOrganizationProvider defaultOrganizationProvider = TestDefaultOrganizationProvider.from(db);
 
   private RuleUpdater underTest = new RuleUpdater(db.getDbClient(), ruleIndexer, system2);
 
   @Test
   public void do_not_update_rule_with_removed_status() {
-    db.rules().insert(RuleTesting.newRule(RULE_KEY).setStatus(RuleStatus.REMOVED));
+    db.rules().insert(RuleTesting.newRule(RULE_KEY).setStatus(REMOVED));
     dbSession.commit();
 
-    RuleUpdate update = RuleUpdate.createForPluginRule(RULE_KEY)
+    RuleUpdate update = createForPluginRule(RULE_KEY)
       .setTags(Sets.newHashSet("java9"))
       .setOrganization(db.getDefaultOrganization());
-    try {
-      underTest.update(dbSession, update, db.getDefaultOrganization(), userSessionRule);
-      fail();
-    } catch (IllegalArgumentException e) {
-      assertThat(e).hasMessage("Rule with REMOVED status cannot be updated: squid:S001");
-    }
+
+    expectedException.expect(IllegalArgumentException.class);
+    expectedException.expectMessage("Rule with REMOVED status cannot be updated: squid:S001");
+
+    underTest.update(dbSession, update, db.getDefaultOrganization(), userSessionRule);
   }
 
   @Test
@@ -116,7 +118,7 @@ public class RuleUpdaterTest {
     db.rules().insertOrUpdateMetadata(ruleDto.getMetadata().setRuleId(ruleDto.getId()));
     dbSession.commit();
 
-    RuleUpdate update = RuleUpdate.createForPluginRule(RULE_KEY);
+    RuleUpdate update = createForPluginRule(RULE_KEY);
     assertThat(update.isEmpty()).isTrue();
     underTest.update(dbSession, update, db.getDefaultOrganization(), userSessionRule);
 
@@ -147,7 +149,7 @@ public class RuleUpdaterTest {
     db.rules().insertOrUpdateMetadata(ruleDto.getMetadata().setRuleId(ruleDto.getId()));
     dbSession.commit();
 
-    RuleUpdate update = RuleUpdate.createForPluginRule(RULE_KEY)
+    RuleUpdate update = createForPluginRule(RULE_KEY)
       .setMarkdownNote("my *note*")
       .setOrganization(db.getDefaultOrganization());
     underTest.update(dbSession, update, db.getDefaultOrganization(), userSessionRule);
@@ -174,7 +176,7 @@ public class RuleUpdaterTest {
     db.rules().insertOrUpdateMetadata(ruleDto.getMetadata().setRuleId(ruleDto.getId()));
     dbSession.commit();
 
-    RuleUpdate update = RuleUpdate.createForPluginRule(RULE_KEY)
+    RuleUpdate update = createForPluginRule(RULE_KEY)
       .setMarkdownNote(null)
       .setOrganization(db.getDefaultOrganization());
     underTest.update(dbSession, update, db.getDefaultOrganization(), userSessionRule);
@@ -196,7 +198,7 @@ public class RuleUpdaterTest {
     dbSession.commit();
 
     // java8 is a system tag -> ignore
-    RuleUpdate update = RuleUpdate.createForPluginRule(RULE_KEY)
+    RuleUpdate update = createForPluginRule(RULE_KEY)
       .setTags(Sets.newHashSet("bug", "java8"))
       .setOrganization(db.getDefaultOrganization());
     underTest.update(dbSession, update, db.getDefaultOrganization(), userSessionRule);
@@ -219,7 +221,7 @@ public class RuleUpdaterTest {
     db.rules().insertOrUpdateMetadata(ruleDto.getMetadata());
     dbSession.commit();
 
-    RuleUpdate update = RuleUpdate.createForPluginRule(RULE_KEY)
+    RuleUpdate update = createForPluginRule(RULE_KEY)
       .setTags(null)
       .setOrganization(db.getDefaultOrganization());
     underTest.update(dbSession, update, db.getDefaultOrganization(), userSessionRule);
@@ -243,7 +245,7 @@ public class RuleUpdaterTest {
     dbSession.commit();
 
     DefaultDebtRemediationFunction fn = new DefaultDebtRemediationFunction(DebtRemediationFunction.Type.CONSTANT_ISSUE, null, "1min");
-    RuleUpdate update = RuleUpdate.createForPluginRule(RULE_KEY)
+    RuleUpdate update = createForPluginRule(RULE_KEY)
       .setDebtRemediationFunction(fn)
       .setOrganization(db.getDefaultOrganization());
     underTest.update(dbSession, update, db.getDefaultOrganization(), userSessionRule);
@@ -268,7 +270,7 @@ public class RuleUpdaterTest {
       .setDefRemediationBaseEffort(null));
     dbSession.commit();
 
-    RuleUpdate update = RuleUpdate.createForPluginRule(RULE_KEY)
+    RuleUpdate update = createForPluginRule(RULE_KEY)
       .setDebtRemediationFunction(new DefaultDebtRemediationFunction(DebtRemediationFunction.Type.LINEAR, "2d", null))
       .setOrganization(db.getDefaultOrganization());
     underTest.update(dbSession, update, db.getDefaultOrganization(), userSessionRule);
@@ -293,7 +295,7 @@ public class RuleUpdaterTest {
       .setDefRemediationBaseEffort("5min"));
     dbSession.commit();
 
-    RuleUpdate update = RuleUpdate.createForPluginRule(RULE_KEY)
+    RuleUpdate update = createForPluginRule(RULE_KEY)
       .setDebtRemediationFunction(new DefaultDebtRemediationFunction(DebtRemediationFunction.Type.CONSTANT_ISSUE, null, "10min"))
       .setOrganization(db.getDefaultOrganization());
     underTest.update(dbSession, update, db.getDefaultOrganization(), userSessionRule);
@@ -323,7 +325,7 @@ public class RuleUpdaterTest {
     db.rules().insertOrUpdateMetadata(ruleDto.getMetadata().setRuleId(ruleDto.getId()));
     dbSession.commit();
 
-    RuleUpdate update = RuleUpdate.createForPluginRule(RULE_KEY)
+    RuleUpdate update = createForPluginRule(RULE_KEY)
       .setDebtRemediationFunction(null)
       .setOrganization(db.getDefaultOrganization());
     underTest.update(dbSession, update, db.getDefaultOrganization(), userSessionRule);
@@ -512,12 +514,11 @@ public class RuleUpdaterTest {
       .setName("")
       .setMarkdownDescription("New desc")
       .setOrganization(db.getDefaultOrganization());
-    try {
-      underTest.update(dbSession, update, db.getDefaultOrganization(), userSessionRule);
-      fail();
-    } catch (Exception e) {
-      assertThat(e).isInstanceOf(IllegalArgumentException.class).hasMessage("The name is missing");
-    }
+
+    expectedException.expect(IllegalArgumentException.class);
+    expectedException.expectMessage("The name is missing");
+
+    underTest.update(dbSession, update, db.getDefaultOrganization(), userSessionRule);
   }
 
   @Test
@@ -537,12 +538,11 @@ public class RuleUpdaterTest {
       .setName("New name")
       .setMarkdownDescription("")
       .setOrganization(db.getDefaultOrganization());
-    try {
-      underTest.update(dbSession, update, db.getDefaultOrganization(), userSessionRule);
-      fail();
-    } catch (Exception e) {
-      assertThat(e).isInstanceOf(IllegalArgumentException.class).hasMessage("The description is missing");
-    }
+
+    expectedException.expect(IllegalArgumentException.class);
+    expectedException.expectMessage("The description is missing");
+
+    underTest.update(dbSession, update, db.getDefaultOrganization(), userSessionRule);
   }
 
   @Test
@@ -550,17 +550,12 @@ public class RuleUpdaterTest {
     // Create rule rule
     RuleDefinitionDto ruleDto = RuleTesting.newRule(RuleKey.of("squid", "S01"));
     db.rules().insert(ruleDto);
-
     dbSession.commit();
 
-    try {
-      // Update rule
-      RuleUpdate.createForPluginRule(ruleDto.getKey())
-        .setName("New name");
-      fail();
-    } catch (Exception e) {
-      assertThat(e).isInstanceOf(IllegalStateException.class).hasMessage("Not a custom rule");
-    }
+    expectedException.expect(IllegalArgumentException.class);
+    expectedException.expectMessage("Not a custom rule");
+
+    createForPluginRule(ruleDto.getKey()).setName("New name");
   }
 
   @Test
@@ -568,35 +563,24 @@ public class RuleUpdaterTest {
     // Create rule rule
     RuleDefinitionDto ruleDto = RuleTesting.newRule(RuleKey.of("squid", "S01"));
     db.rules().insert(ruleDto);
-
     dbSession.commit();
 
-    try {
-      // Update rule
-      RuleUpdate.createForPluginRule(ruleDto.getKey())
-        .setMarkdownDescription("New description");
-      fail();
-    } catch (Exception e) {
-      assertThat(e).isInstanceOf(IllegalStateException.class).hasMessage("Not a custom rule");
-    }
+    expectedException.expect(IllegalArgumentException.class);
+    expectedException.expectMessage("Not a custom rule");
+
+    createForPluginRule(ruleDto.getKey()).setMarkdownDescription("New description");
   }
 
   @Test
   public void fail_to_update_plugin_rule_if_severity_is_set() {
-    // Create rule rule
     RuleDefinitionDto ruleDto = RuleTesting.newRule(RuleKey.of("squid", "S01"));
     db.rules().insert(ruleDto);
-
     dbSession.commit();
 
-    try {
-      // Update rule
-      RuleUpdate.createForPluginRule(ruleDto.getKey())
-        .setSeverity(Severity.CRITICAL);
-      fail();
-    } catch (Exception e) {
-      assertThat(e).isInstanceOf(IllegalStateException.class).hasMessage("Not a custom rule");
-    }
+    expectedException.expect(IllegalArgumentException.class);
+    expectedException.expectMessage("Not a custom rule");
+
+    createForPluginRule(ruleDto.getKey()).setSeverity(CRITICAL);
   }
 
   private static Map<String, RuleParamDto> paramsByKey(List<RuleParamDto> params) {

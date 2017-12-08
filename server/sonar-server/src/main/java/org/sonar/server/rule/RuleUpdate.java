@@ -224,7 +224,7 @@ public class RuleUpdate {
 
   private void checkCustomRule() {
     if (useCase != CUSTOM_RULE) {
-      throw new IllegalStateException("Not a custom rule");
+      throw new IllegalArgumentException("Not a custom rule");
     }
   }
 
