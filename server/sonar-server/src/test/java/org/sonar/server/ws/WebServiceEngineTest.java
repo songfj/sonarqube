@@ -200,6 +200,16 @@ public class WebServiceEngineTest {
   }
 
   @Test
+  public void required_parameter_is_not_set_but_not_called_as_mandatory() {
+    ValidatingRequest request = new TestRequest().setMethod("GET").setPath("/api/system/hello-world")
+      .setParam("message", "Wayne");
+    DumbResponse response = new DumbResponse();
+    underTest.execute(request, response);
+
+    assertThat(response.stream().outputAsString()).isEqualTo("Hello, Wayne's World");
+  }
+
+  @Test
   public void optional_parameter_is_not_set() {
     ValidatingRequest request = new TestRequest().setMethod("GET").setPath("/api/system/print").setParam("message", "Hello World");
     DumbResponse response = new DumbResponse();
@@ -377,6 +387,17 @@ public class WebServiceEngineTest {
           request.param("format");
           IOUtils.write(
             request.mandatoryParam("message") + " by " + request.param("author", "nobody"), response.stream().output());
+        } catch (IOException e) {
+          throw new IllegalStateException(e);
+        }
+      });
+
+      // parameter "message" is required
+      NewAction helloWorld = createNewDefaultAction(newController, "hello-world");
+      helloWorld.createParam("message").setDescription("required message").setRequired(true);
+      helloWorld.setHandler((request, response) -> {
+        try {
+          IOUtils.write("Hello, " + request.param("message") + "'s World", response.stream().output());
         } catch (IOException e) {
           throw new IllegalStateException(e);
         }
