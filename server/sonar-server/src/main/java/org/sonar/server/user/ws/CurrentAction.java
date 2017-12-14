@@ -21,27 +21,31 @@ package org.sonar.server.user.ws;
 
 import java.util.Collection;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Optional;
 import org.sonar.api.server.ws.Change;
 import org.sonar.api.server.ws.Request;
 import org.sonar.api.server.ws.Response;
 import org.sonar.api.server.ws.WebService.NewController;
 import org.sonar.db.DbClient;
 import org.sonar.db.DbSession;
+import org.sonar.db.component.ComponentDto;
+import org.sonar.db.organization.OrganizationDto;
 import org.sonar.db.permission.OrganizationPermission;
 import org.sonar.db.user.UserDto;
 import org.sonar.server.issue.ws.AvatarResolver;
 import org.sonar.server.organization.DefaultOrganizationProvider;
 import org.sonar.server.user.UserSession;
 import org.sonarqube.ws.Users.CurrentWsResponse;
-import org.sonarqube.ws.Users.CurrentWsResponse.Homepage;
 
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Strings.emptyToNull;
 import static java.util.Collections.singletonList;
+import static java.util.stream.Collectors.toList;
+import static org.apache.commons.lang.StringUtils.EMPTY;
+import static org.apache.commons.lang.StringUtils.isNotBlank;
 import static org.sonar.core.util.Protobuf.setNullable;
 import static org.sonar.server.ws.WsUtils.writeProtobuf;
-import static org.sonarqube.ws.Users.CurrentWsResponse.HomepageType.PROJECT;
+import static org.sonarqube.ws.Users.CurrentWsResponse.HomepageType.MY_PROJECTS;
 import static org.sonarqube.ws.Users.CurrentWsResponse.Permissions;
 import static org.sonarqube.ws.Users.CurrentWsResponse.newBuilder;
 import static org.sonarqube.ws.client.user.UsersWsParameters.ACTION_CURRENT;
@@ -52,7 +56,8 @@ public class CurrentAction implements UsersWsAction {
   private final DefaultOrganizationProvider defaultOrganizationProvider;
   private final AvatarResolver avatarResolver;
 
-  public CurrentAction(UserSession userSession, DbClient dbClient, DefaultOrganizationProvider defaultOrganizationProvider, AvatarResolver avatarResolver) {
+  public CurrentAction(UserSession userSession, DbClient dbClient, DefaultOrganizationProvider defaultOrganizationProvider,
+    AvatarResolver avatarResolver) {
     this.userSession = userSession;
     this.dbClient = dbClient;
     this.defaultOrganizationProvider = defaultOrganizationProvider;
@@ -98,7 +103,7 @@ public class CurrentAction implements UsersWsAction {
       .addAllGroups(groups)
       .addAllScmAccounts(user.getScmAccountsAsList())
       .setPermissions(Permissions.newBuilder().addAllGlobal(getGlobalPermissions()).build())
-      .setHomepage(Homepage.newBuilder().setType(PROJECT).setValue("project-key").build())
+      .setHomepage(findHomepageFor(dbSession, user))
       .setShowOnboardingTutorial(!user.isOnboarded());
     setNullable(emptyToNull(user.getEmail()), builder::setEmail);
     setNullable(emptyToNull(user.getEmail()), u -> builder.setAvatar(avatarResolver.create(user)));
@@ -112,6 +117,53 @@ public class CurrentAction implements UsersWsAction {
     return OrganizationPermission.all()
       .filter(permission -> userSession.hasPermission(permission, defaultOrganizationUuid))
       .map(OrganizationPermission::getKey)
-      .collect(Collectors.toList());
+      .collect(toList());
   }
+
+  private CurrentWsResponse.Homepage findHomepageFor(DbSession dbSession, UserDto user) {
+    CurrentWsResponse.Homepage homepage = null;
+    if (isNotBlank(user.getHomepageType())) {
+      homepage = homepageOf(dbSession, user);
+    }
+    return homepage != null ? homepage : defaultHomepageOf();
+  }
+
+  private CurrentWsResponse.Homepage homepageOf(DbSession dbSession, UserDto user) {
+    String publicKey = getPublicKey(dbSession, user.getHomepageType(), user.getHomepageValue());
+    if (publicKey != null) {
+      return CurrentWsResponse.Homepage.newBuilder()
+        .setType(CurrentWsResponse.HomepageType.valueOf(user.getHomepageType()))
+        .setValue(publicKey)
+        .build();
+    }
+    return null;
+  }
+
+  private String getPublicKey(DbSession dbSession, String homepageType, String homepageKey) {
+    if (CurrentWsResponse.HomepageType.PROJECT.toString().equals(homepageType)) {
+      com.google.common.base.Optional<ComponentDto> dto = dbClient.componentDao().selectByUuid(dbSession, homepageKey);
+      if (dto.isPresent()) {
+        return dto.get().getKey();
+      } else {
+        return null;
+      }
+    }
+    if (CurrentWsResponse.HomepageType.ORGANIZATION.toString().equals(homepageType)) {
+      Optional<OrganizationDto> dto = dbClient.organizationDao().selectByUuid(dbSession, homepageKey);
+      if (dto.isPresent()) {
+        return dto.get().getKey();
+      } else {
+        return null;
+      }
+    }
+    return EMPTY;
+  }
+
+  // Default WIP implementation to be done in SONAR-10185
+  private static CurrentWsResponse.Homepage defaultHomepageOf() {
+    return CurrentWsResponse.Homepage.newBuilder()
+      .setType(MY_PROJECTS)
+      .build();
+  }
+
 }
