@@ -82,7 +82,6 @@ public class HomepageFinderTest {
 
 
   @Test
-  @Ignore // Default WIP implementation to be done in SONAR-10185
   public void default_if_homepage_project_key_does_not_match_a_project() throws Exception {
     String frozenUUID = UUID.randomUUID().toString();
     UserDto userDto = new UserDto().setHomepageType("PROJECT").setHomepageKey(frozenUUID);
@@ -94,7 +93,6 @@ public class HomepageFinderTest {
   }
 
   @Test
-  @Ignore // Default WIP implementation to be done in SONAR-10185
   public void default_if_homepage_organization_key_does_not_match_an_organization() throws Exception {
     String frozenUUID = UUID.randomUUID().toString();
     UserDto userDto = new UserDto().setHomepageType("ORGANIZATION").setHomepageKey(frozenUUID);
@@ -110,8 +108,35 @@ public class HomepageFinderTest {
 
 
   @Test
-  @Ignore // Default WIP implementation to be done in SONAR-10185
   public void find_default_homepage_when_users_does_not_have_one() throws Exception {
+    UserDto user = dbTester.users().insertUser();
+    OrganizationDto organization = dbTester.organizations().insert(u -> u.setUserId(user.getId()));
+
+    HomepageFinder underTest = new HomepageFinder(dbClient);
+
+    Homepage homepage = underTest.findFor(dbSession, new UserDto());
+
+    assertThat(homepage).isNotNull();
+    assertThat(homepage.getType()).isEqualTo(ORGANIZATION);
+    assertThat(homepage.getType()).isEqualTo(organization.getKey());
+
+  }
+
+
+  @Test
+  public void find_right_default_homepage_when_users_does_not_have_one_and_have_multiple_organization() throws Exception {
+    UserDto user = dbTester.users().insertUser();
+    OrganizationDto personalOrganization = dbTester.organizations().insert(u -> u.setUserId(user.getId()));
+    OrganizationDto organization1 = dbTester.organizations().insert(u -> u.setUserId(user.getId()));
+    OrganizationDto organization2 = dbTester.organizations().insert(u -> u.setUserId(user.getId()));
+
+    HomepageFinder underTest = new HomepageFinder(dbClient);
+
+    Homepage homepage = underTest.findFor(dbSession, new UserDto());
+
+    assertThat(homepage).isNotNull();
+    assertThat(homepage.getType()).isEqualTo(ORGANIZATION);
+    assertThat(homepage.getType()).isEqualTo(organization1.getKey());
 
   }
 
